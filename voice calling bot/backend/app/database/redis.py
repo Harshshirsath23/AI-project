@@ -21,6 +21,12 @@ async def get_redis() -> Redis:
     return redis.Redis(connection_pool=redis_pool)
 
 
+def get_redis_client() -> Redis:
+    """Get synchronous/instance access to Redis client using connection pool."""
+    return redis.Redis(connection_pool=redis_pool)
+
+
+
 async def init_redis() -> None:
     """Initialize Redis connection."""
     try:

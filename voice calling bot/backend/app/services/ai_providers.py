@@ -137,6 +137,67 @@ class AIProviderService:
         # Return None if LLM is unavailable so conversation service uses script stage progression
         return None
 
+    async def analyze_call_transcript(self, history: List[Dict[str, str]]) -> Dict[str, str]:
+        """
+        Analyzes a completed call transcript history using Gemini LLM.
+        Returns a dict with 'sentiment' (positive, neutral, negative, interested, not-interested) and 'summary'.
+        """
+        if not history:
+            return {"sentiment": "neutral", "summary": "Call ended without speech turns."}
+
+        formatted_turns = []
+        for turn in history:
+            role = "Lead" if turn.get("role") == "user" else "AI Agent"
+            content = turn.get("content", "")
+            if content:
+                formatted_turns.append(f"{role}: {content}")
+
+        if not formatted_turns:
+            return {"sentiment": "neutral", "summary": "Call completed with zero dialogue turns."}
+
+        transcript_text = "\n".join(formatted_turns)
+        prompt = (
+            f"Analyze this phone call transcript between an AI sales agent and a customer:\n\n"
+            f"{transcript_text}\n\n"
+            f"Respond ONLY in valid JSON format with two keys:\n"
+            f"1. \"sentiment\": strictly one of [\"positive\", \"neutral\", \"negative\", \"interested\", \"not-interested\"]\n"
+            f"2. \"summary\": a concise 2-sentence executive summary of the conversation and outcome.\n"
+            f"Do not include markdown code block formatting."
+        )
+
+        if self.gemini_client:
+            try:
+                import json
+                for model_name in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]:
+                    try:
+                        response = self.gemini_client.models.generate_content(
+                            model=model_name,
+                            contents=prompt,
+                        )
+                        if response and response.text:
+                            raw_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+                            data = json.loads(raw_text)
+                            sentiment = data.get("sentiment", "neutral").lower()
+                            summary = data.get("summary", "Call completed successfully.")
+                            return {"sentiment": sentiment, "summary": summary}
+                    except Exception as err:
+                        if "404" in str(err) or "429" in str(err) or "RESOURCE_EXHAUSTED" in str(err):
+                            continue
+                        break
+            except Exception as e:
+                logger.error(f"Error performing AI transcript analysis: {e}")
+
+        # Fallback heuristic analysis if Gemini API is unreachable
+        user_words = " ".join([t.get("content", "").lower() for t in history if t.get("role") == "user"])
+        sentiment = "neutral"
+        if any(w in user_words for w in ["yes", "interested", "sure", "great", "send", "book", "demo", "love"]):
+            sentiment = "interested"
+        elif any(w in user_words for w in ["no", "stop", "not interested", "busy", "don't", "wrong"]):
+            sentiment = "not-interested"
+
+        summary = f"Call processed with {len(history)} conversation turns."
+        return {"sentiment": sentiment, "summary": summary}
+
 
     async def generate_speech(self, text: str, provider: str = "gtts", voice: Optional[str] = None) -> bytes:
         """

@@ -12,7 +12,7 @@ from app.authentication.jwt import get_token_expiration
 from app.authentication.service import AuthenticationService
 from app.config.settings import get_settings
 from app.core.logging import get_logger
-from app.database.connection import get_db
+from app.database.connection import get_async_db
 from app.schemas.auth import (
     CurrentUserResponse,
     LoginRequest,
@@ -34,7 +34,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     request: RegisterRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Register a new user and create an organization.
@@ -86,7 +86,7 @@ async def register(
 @router.post("/login", response_model=TokenResponse)
 async def login(
     request: LoginRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Authenticate a user and return access and refresh tokens.
@@ -127,7 +127,7 @@ async def login(
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
     request: RefreshTokenRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Refresh access and refresh tokens using a valid refresh token.
@@ -213,7 +213,7 @@ async def get_current_user_info(
 async def change_password(
     request: PasswordChangeRequest,
     auth: AuthenticatedUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Change the current user's password.
@@ -245,7 +245,7 @@ async def change_password(
 @router.post("/reset-password")
 async def request_password_reset(
     request: PasswordResetRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Request a password reset.
@@ -277,7 +277,7 @@ async def request_password_reset(
 @router.post("/reset-password/confirm")
 async def confirm_password_reset(
     request: PasswordResetConfirm,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Confirm password reset with token.

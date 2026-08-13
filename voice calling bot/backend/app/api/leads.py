@@ -34,20 +34,6 @@ async def list_leads(
         query = query.filter(Lead.status == status)
         
     leads = query.order_by(Lead.created_at.desc()).all()
-    
-    # If DB is empty, populate demo seed lead
-    if not leads:
-        demo_lead = Lead(
-            name="Harsh Shirsath",
-            phone_number="+917039015196",
-            email="harsh@example.com",
-            company="Voxera Client",
-            status="pending",
-        )
-        db.add(demo_lead)
-        db.commit()
-        db.refresh(demo_lead)
-        leads = [demo_lead]
 
     return [
         {
@@ -76,6 +62,7 @@ async def create_lead(data: LeadCreateSchema, db: Session = Depends(get_db)):
         company=data.company,
         campaign_id=data.campaign_id if data.campaign_id else None,
         notes=data.notes,
+        source="manual",
         status="pending",
     )
     db.add(lead)
@@ -84,27 +71,156 @@ async def create_lead(data: LeadCreateSchema, db: Session = Depends(get_db)):
     return {"status": "success", "id": str(lead.id), "name": lead.name}
 
 
-@router.post("/import")
-async def import_leads_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    """Import contacts from CSV file."""
-    content = await file.read()
-    text = content.decode("utf-8-sig")
-    reader = csv.DictReader(io.StringIO(text))
-    
-    imported_count = 0
-    for row in reader:
-        name = row.get("name") or row.get("Name") or "Unknown Contact"
-        phone = row.get("phone") or row.get("Phone") or row.get("phone_number")
-        if phone:
-            lead = Lead(
-                name=name,
-                phone_number=phone,
-                email=row.get("email") or row.get("Email"),
-                company=row.get("company") or row.get("Company"),
-                status="pending"
-            )
-            db.add(lead)
-            imported_count += 1
-            
+@router.post("/bulk")
+async def create_leads_bulk(
+    leads_data: List[LeadCreateSchema],
+    db: Session = Depends(get_db)
+):
+    """Batch create multiple leads into PostgreSQL."""
+    if not leads_data:
+        raise HTTPException(status_code=400, detail="Empty leads list provided.")
+
+    created_leads = []
+    for item in leads_data:
+        if not item.phone_number or not item.name:
+            continue
+        lead = Lead(
+            name=item.name.strip(),
+            phone_number=item.phone_number.strip(),
+            email=item.email.strip() if item.email else None,
+            company=item.company.strip() if item.company else None,
+            campaign_id=item.campaign_id if item.campaign_id else None,
+            notes=item.notes,
+            source="csv_import",
+            status="pending",
+        )
+        db.add(lead)
+        created_leads.append(lead)
+
     db.commit()
-    return {"status": "success", "imported_count": imported_count}
+    for l in created_leads:
+        db.refresh(l)
+
+    return {
+        "status": "success",
+        "imported_count": len(created_leads),
+        "leads": [{"id": str(l.id), "name": l.name, "phone_number": l.phone_number} for l in created_leads]
+    }
+
+
+@router.post("/upload-csv")
+async def upload_leads_csv(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """Upload, parse, and persist CSV leads directly to PostgreSQL."""
+    if not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only .csv files are supported.")
+
+    content = await file.read()
+    try:
+        text_content = content.decode("utf-8")
+    except UnicodeDecodeError:
+        text_content = content.decode("latin-1")
+
+    reader = csv.DictReader(io.StringIO(text_content))
+    created_leads = []
+
+    for row in reader:
+        # Normalize header keys to lowercase
+        norm_row = {k.strip().lower(): v.strip() for k, v in row.items() if k}
+
+        # Find name
+        name = (
+            norm_row.get("name")
+            or norm_row.get("full_name")
+            or norm_row.get("contact_name")
+            or norm_row.get("lead_name")
+            or "Target Lead"
+        )
+
+        # Find phone
+        phone = (
+            norm_row.get("phone")
+            or norm_row.get("phone_number")
+            or norm_row.get("mobile")
+            or norm_row.get("telephone")
+            or norm_row.get("contact_number")
+            or ""
+        )
+
+        if not phone:
+            continue
+
+        email = norm_row.get("email") or norm_row.get("email_address") or None
+        company = norm_row.get("company") or norm_row.get("organization") or norm_row.get("business") or None
+        notes = norm_row.get("notes") or norm_row.get("description") or None
+
+        lead = Lead(
+            name=name,
+            phone_number=phone,
+            email=email,
+            company=company,
+            notes=notes,
+            source="csv_upload",
+            status="pending",
+        )
+        db.add(lead)
+        created_leads.append(lead)
+
+    db.commit()
+    for l in created_leads:
+        db.refresh(l)
+
+    return {
+        "status": "success",
+        "imported_count": len(created_leads),
+        "leads": [{"id": str(l.id), "name": l.name, "phone_number": l.phone_number} for l in created_leads]
+    }
+
+
+class LeadUpdateSchema(BaseModel):
+    name: Optional[str] = None
+    phone_number: Optional[str] = None
+    email: Optional[str] = None
+    company: Optional[str] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@router.put("/{lead_id}")
+async def update_lead(lead_id: str, data: LeadUpdateSchema, db: Session = Depends(get_db)):
+    """Update lead details."""
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    if data.name is not None:
+        lead.name = data.name
+    if data.phone_number is not None:
+        lead.phone_number = data.phone_number
+    if data.email is not None:
+        lead.email = data.email
+    if data.company is not None:
+        lead.company = data.company
+    if data.status is not None:
+        lead.status = data.status
+    if data.notes is not None:
+        lead.notes = data.notes
+
+    db.commit()
+    db.refresh(lead)
+    return {"status": "success", "id": str(lead.id), "name": lead.name}
+
+
+@router.delete("/{lead_id}")
+async def delete_lead(lead_id: str, db: Session = Depends(get_db)):
+    """Delete a lead."""
+    from datetime import datetime, UTC
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    lead.deleted_at = datetime.now(UTC)
+    db.commit()
+    return {"status": "success", "message": "Lead deleted successfully"}

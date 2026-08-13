@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Search, Upload, PhoneCall, Bot, Play, Loader2, CheckCircle2, UserPlus, Sparkles } from "lucide-react"
+import { Search, Upload, PhoneCall, Bot, Play, Loader2, CheckCircle2, UserPlus, Sparkles, Edit3, Trash2 } from "lucide-react"
 import { api } from "@/services/api"
 
 interface Lead {
@@ -38,6 +38,15 @@ export function LeadsListPage() {
   const [newLeadCompany, setNewLeadCompany] = React.useState("")
   const [isSavingLead, setIsSavingLead] = React.useState(false)
 
+  // Lead Editing State
+  const [editingLead, setEditingLead] = React.useState<Lead | null>(null)
+  const [editName, setEditName] = React.useState("")
+  const [editPhone, setEditPhone] = React.useState("")
+  const [editEmail, setEditEmail] = React.useState("")
+  const [editCompany, setEditCompany] = React.useState("")
+  const [editStatus, setEditStatus] = React.useState("")
+  const [isUpdatingLead, setIsUpdatingLead] = React.useState(false)
+
   const fetchLeads = () => {
     api.getLeads()
       .then(data => setLeads(data))
@@ -61,29 +70,65 @@ export function LeadsListPage() {
     setIsSavingLead(true)
 
     try {
-      const res = await fetch("http://localhost:8000/api/v1/leads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newLeadName,
-          phone_number: newLeadPhone,
-          email: newLeadEmail,
-          company: newLeadCompany,
-        })
+      await api.createLead({
+        name: newLeadName,
+        phone_number: newLeadPhone,
+        email: newLeadEmail,
+        company: newLeadCompany,
       })
 
-      if (res.ok) {
-        setNewLeadName("")
-        setNewLeadPhone("")
-        setNewLeadEmail("")
-        setNewLeadCompany("")
-        setIsAddLeadOpen(false)
-        fetchLeads()
-      }
+      setNewLeadName("")
+      setNewLeadPhone("")
+      setNewLeadEmail("")
+      setNewLeadCompany("")
+      setIsAddLeadOpen(false)
+      fetchLeads()
     } catch (e) {
       console.error("Error saving lead:", e)
     } finally {
       setIsSavingLead(false)
+    }
+  }
+
+  // Open Edit Modal
+  const openEditLeadModal = (lead: Lead) => {
+    setEditingLead(lead)
+    setEditName(lead.name || "")
+    setEditPhone(lead.phone_number || lead.phone || "")
+    setEditEmail(lead.email || "")
+    setEditCompany(lead.company || "")
+    setEditStatus(lead.status || "pending")
+  }
+
+  // Save Edit Lead
+  const handleSaveEditLead = async () => {
+    if (!editingLead) return
+    setIsUpdatingLead(true)
+    try {
+      await api.updateLead(editingLead.id, {
+        name: editName,
+        phone_number: editPhone,
+        email: editEmail,
+        company: editCompany,
+        status: editStatus,
+      })
+      setEditingLead(null)
+      fetchLeads()
+    } catch (e) {
+      console.error("Error updating lead:", e)
+    } finally {
+      setIsUpdatingLead(false)
+    }
+  }
+
+  // Delete Lead
+  const handleDeleteLead = async (leadId: string) => {
+    if (!window.confirm("Are you sure you want to delete this lead?")) return
+    try {
+      await api.deleteLead(leadId)
+      fetchLeads()
+    } catch (e) {
+      console.error("Error deleting lead:", e)
     }
   }
 
@@ -167,23 +212,43 @@ export function LeadsListPage() {
     },
     {
       key: "actions",
-      header: "Quick Action",
-      className: "w-[180px]",
+      header: "Actions",
+      className: "w-[240px]",
       cell: (row) => (
-        <Button
-          size="sm"
-          variant="default"
-          className="bg-primary hover:bg-primary/90 text-xs gap-1.5"
-          onClick={() => handleCallSingleLead(row)}
-          disabled={callingLeadId === row.id || isBatchCalling}
-        >
-          {callingLeadId === row.id ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <PhoneCall className="h-3.5 w-3.5" />
-          )}
-          Call Now
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="default"
+            className="bg-primary hover:bg-primary/90 text-xs gap-1 h-8 px-2"
+            onClick={() => handleCallSingleLead(row)}
+            disabled={callingLeadId === row.id || isBatchCalling}
+          >
+            {callingLeadId === row.id ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <PhoneCall className="h-3.5 w-3.5" />
+            )}
+            Call
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-2 text-xs gap-1"
+            onClick={() => openEditLeadModal(row)}
+          >
+            <Edit3 className="h-3.5 w-3.5 text-blue-600" /> Edit
+          </Button>
+
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+            onClick={() => handleDeleteLead(row.id)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       ),
     },
   ]
@@ -297,6 +362,72 @@ export function LeadsListPage() {
       </div>
 
       <DataTable columns={columns} data={leads} />
+
+      {/* Edit Lead Dialog */}
+      <Dialog open={!!editingLead} onOpenChange={(open) => !open && setEditingLead(null)}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit3 className="h-5 w-5 text-primary" /> Edit Lead Information
+            </DialogTitle>
+            <DialogDescription>
+              Update contact information and status for this lead.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4 text-xs">
+            <div className="space-y-1.5">
+              <label className="font-semibold">Full Name *</label>
+              <Input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="font-semibold">Phone Number (E.164 format) *</label>
+              <Input
+                value={editPhone}
+                onChange={(e) => setEditPhone(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="font-semibold">Email Address</label>
+              <Input
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="font-semibold">Company / Organization</label>
+              <Input
+                value={editCompany}
+                onChange={(e) => setEditCompany(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="font-semibold">Status</label>
+              <select
+                className="w-full h-9 px-3 border rounded-md bg-background text-xs"
+                value={editStatus}
+                onChange={(e) => setEditStatus(e.target.value)}
+              >
+                <option value="pending">Pending</option>
+                <option value="completed">Completed</option>
+                <option value="contacted">Contacted</option>
+                <option value="failed">Failed</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setEditingLead(null)}>Cancel</Button>
+            <Button onClick={handleSaveEditLead} disabled={isUpdatingLead || !editName.trim() || !editPhone.trim()}>
+              {isUpdatingLead ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Edit3 className="mr-2 h-4 w-4" />}
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   )
 }

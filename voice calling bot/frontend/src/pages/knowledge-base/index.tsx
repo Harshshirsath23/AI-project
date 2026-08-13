@@ -42,11 +42,8 @@ export function KnowledgeBasePage() {
 
   const fetchDocuments = async (kbId: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/knowledge-base/${kbId}/documents`)
-      if (res.ok) {
-        const data = await res.json()
-        setDocuments(data)
-      }
+      const data = await api.getKbDocuments(kbId)
+      setDocuments(data || [])
     } catch (e) {
       console.error("Error fetching KB documents:", e)
     }
@@ -62,21 +59,14 @@ export function KnowledgeBasePage() {
     setIsSaving(true)
 
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/knowledge-base/${activeKbId}/documents/text`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: scriptTitle,
-          script_text: scriptText,
-        })
+      await api.createKbTextDocument(activeKbId, {
+        title: scriptTitle,
+        script_text: scriptText,
       })
-
-      if (res.ok) {
-        setScriptTitle("")
-        setScriptText("")
-        setIsDialogOpen(false)
-        fetchDocuments(activeKbId)
-      }
+      setScriptTitle("")
+      setScriptText("")
+      setIsDialogOpen(false)
+      fetchDocuments(activeKbId)
     } catch (err) {
       console.error("Error uploading script:", err)
     } finally {
@@ -95,18 +85,12 @@ export function KnowledgeBasePage() {
     if (!selectedDoc || !editContent.trim()) return
     setIsUpdatingScript(true)
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/knowledge-base/documents/${selectedDoc.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: editTitle,
-          content: editContent
-        })
+      await api.updateKbDocument(selectedDoc.id, {
+        title: editTitle,
+        content: editContent,
       })
-      if (res.ok) {
-        setIsEditDialogOpen(false)
-        fetchDocuments(activeKbId)
-      }
+      setIsEditDialogOpen(false)
+      fetchDocuments(activeKbId)
     } catch (e) {
       console.error("Error updating script:", e)
     } finally {
@@ -227,17 +211,12 @@ export function KnowledgeBasePage() {
 
       <DataTable
         columns={columns}
-        data={documents.length > 0 ? documents : [
-          {
-            id: "doc_default",
-            title: "Voxera Sales Script & Product Guide",
-            file_name: "voxera_sales_script.txt",
-            file_size: 1024,
-            embedding_status: "completed",
-            content_preview: "Greeting: Hi {name}! This is Sarah from Voxera. Am I catching you at a bad time? Questions: Ask about call volume and latency."
-          }
-        ]}
+        data={documents}
+        getRowId={(row) => row.id}
+        emptyTitle="No knowledge base documents found"
+        emptyDescription="Add a conversation script or document to get started."
       />
+
 
       {/* Edit / View Script Modal Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>

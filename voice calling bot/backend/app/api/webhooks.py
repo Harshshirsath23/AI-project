@@ -55,6 +55,23 @@ async def twilio_voice_twiml(
         <Say voice="Polly.Joanna">{safe_greeting}</Say>
     </Gather>
 </Response>'''
+
+    # Broadcast initial greeting over WebSocket to Live Monitor
+    from app.websockets.connection_manager import ws_manager
+    try:
+        await ws_manager.broadcast_to_room(
+            f"call:{call_id}",
+            {
+                "event": "transcript_turn",
+                "call_id": call_id,
+                "role": "assistant",
+                "content": greeting,
+                "state": "speaking",
+            }
+        )
+    except Exception as ws_err:
+        logger.warning(f"WS broadcast error: {ws_err}")
+
     return Response(content=twiml, media_type="text/xml")
 
 
@@ -74,6 +91,7 @@ async def twilio_voice_gather(
     settings = get_settings()
     base_url = settings.webhook_base_url.rstrip("/")
     gather_action = f"{base_url}/api/v1/webhooks/twilio/gather?call_id={call_id}"
+    from app.websockets.connection_manager import ws_manager
 
     # Parse SpeechResult from Twilio POST request
     form_data = await request.form()
@@ -85,10 +103,40 @@ async def twilio_voice_gather(
     if speech_result and speech_result.strip():
         session["history"].append({"role": "user", "content": speech_result})
 
+        # Broadcast live user speech turn to WebSocket
+        try:
+            await ws_manager.broadcast_to_room(
+                f"call:{call_id}",
+                {
+                    "event": "transcript_turn",
+                    "call_id": call_id,
+                    "role": "user",
+                    "content": speech_result,
+                    "state": "thinking",
+                }
+            )
+        except Exception:
+            pass
+
         # Generate next human-like script response
         ai_response_text = await conversation_service.generate_next_script_turn(call_id, speech_result)
         logger.info(f"Call {call_id} AI Response: '{ai_response_text}'")
         session["history"].append({"role": "assistant", "content": ai_response_text})
+
+        # Broadcast live AI assistant response turn to WebSocket
+        try:
+            await ws_manager.broadcast_to_room(
+                f"call:{call_id}",
+                {
+                    "event": "transcript_turn",
+                    "call_id": call_id,
+                    "role": "assistant",
+                    "content": ai_response_text,
+                    "state": "speaking",
+                }
+            )
+        except Exception:
+            pass
 
         # Persist transcript to PostgreSQL so Live Monitor can display it
         try:
@@ -132,13 +180,24 @@ async def twilio_call_status(
     db: Session = Depends(get_db)
 ):
     """Webhook to handle call status changes from Twilio."""
-    form_data = await request.form()
-    status = form_data.get("CallStatus") or "in-progress"
-    logger.info(f"Twilio status callback: call_id={call_id}, status={status}")
+    try:
+        form_data = await request.form()
+        status = form_data.get("CallStatus") or "in-progress"
+        logger.info(f"Twilio status callback: call_id={call_id}, status={status}")
 
-    if call_id and call_id != "default":
-        if status in ["completed", "failed", "busy", "no-answer", "canceled"]:
-            await conversation_service.end_call(call_id)
+        if call_id and call_id != "default":
+            if status in ["completed", "failed", "busy", "no-answer", "canceled"]:
+                await conversation_service.end_call(call_id)
+                from app.websockets.connection_manager import ws_manager
+                try:
+                    await ws_manager.broadcast_to_room(
+                        f"call:{call_id}",
+                        {"event": "call_ended", "call_id": call_id, "state": "ended"}
+                    )
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.warning(f"Error handling Twilio call status callback: {e}")
 
     return Response(content="<?xml version='1.0'?><Response></Response>", media_type="text/xml")
 

@@ -12,7 +12,7 @@ from app.authentication.dependencies import (
     require_role,
 )
 from app.core.logging import get_logger
-from app.database.connection import get_db
+from app.database.connection import get_async_db
 from app.models.organization import Organization, OrganizationSettings
 from app.schemas.organization import (
     OrganizationCreate,
@@ -33,7 +33,7 @@ async def list_organizations(
     search: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None),
     auth: AuthenticatedUser = Depends(require_role("super_admin")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     List all organizations (super admin only).
@@ -92,7 +92,7 @@ async def list_organizations(
 @router.get("/current", response_model=OrganizationDetailResponse)
 async def get_current_organization(
     org_context: AuthenticatedUser = Depends(get_organization_context),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Get the current user's organization details with settings.
@@ -147,7 +147,7 @@ async def get_current_organization(
 async def get_organization(
     organization_id: str,
     auth: AuthenticatedUser = Depends(require_role("super_admin")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Get organization details by ID (super admin only).
@@ -203,7 +203,7 @@ async def get_organization(
 async def create_organization(
     org_data: OrganizationCreate,
     auth: AuthenticatedUser = Depends(require_role("super_admin")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Create a new organization (super admin only).
@@ -249,7 +249,7 @@ async def update_organization(
     organization_id: str,
     org_data: OrganizationUpdate,
     auth: AuthenticatedUser = Depends(require_permission("manage_organization")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Update organization details.
@@ -297,7 +297,7 @@ async def update_organization_settings(
     organization_id: str,
     settings_data: OrganizationSettingsUpdate,
     auth: AuthenticatedUser = Depends(require_permission("manage_organization")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Update organization settings.
@@ -349,7 +349,7 @@ async def update_organization_settings(
 async def deactivate_organization(
     organization_id: str,
     auth: AuthenticatedUser = Depends(require_role("super_admin")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Deactivate an organization (super admin only).
@@ -382,7 +382,7 @@ async def deactivate_organization(
 async def activate_organization(
     organization_id: str,
     auth: AuthenticatedUser = Depends(require_role("super_admin")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Activate a deactivated organization (super admin only).

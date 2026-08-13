@@ -60,6 +60,16 @@ export function CampaignDetailPage() {
     ? ((data.completed + data.failed) / data.total_leads) * 100 
     : 0
 
+  const handleDelete = async () => {
+    if (!window.confirm("Are you sure you want to delete this campaign?")) return
+    try {
+      await api.deleteCampaign(id || "")
+      navigate("/campaigns")
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -79,17 +89,22 @@ export function CampaignDetailPage() {
             </Button>
             
             {data.status === "paused" || data.status === "draft" ? (
-              <Button onClick={() => handleAction("start")}>
-                <Play className="mr-2 h-4 w-4" /> Start Campaign
+              <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={() => handleAction("start")}>
+                <Play className="mr-2 h-4 w-4" /> Start Calling Campaign
               </Button>
             ) : data.status === "running" ? (
-              <Button variant="secondary" onClick={() => handleAction("pause")} className="text-amber-600 bg-amber-50 hover:bg-amber-100 border-amber-200">
-                <Pause className="mr-2 h-4 w-4" /> Pause Campaign
-              </Button>
+              <>
+                <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => handleAction("start")}>
+                  <Phone className="mr-2 h-4 w-4" /> Make Outbound Calls Now
+                </Button>
+                <Button variant="secondary" onClick={() => handleAction("pause")} className="text-amber-600 bg-amber-50 hover:bg-amber-100 border-amber-200">
+                  <Pause className="mr-2 h-4 w-4" /> Pause Campaign
+                </Button>
+              </>
             ) : null}
 
-            <Button variant="destructive" onClick={() => handleAction("stop")}>
-              <StopCircle className="mr-2 h-4 w-4" /> Stop
+            <Button variant="destructive" onClick={handleDelete}>
+              <StopCircle className="mr-2 h-4 w-4" /> Delete Campaign
             </Button>
           </>
         }

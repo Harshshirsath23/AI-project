@@ -20,9 +20,9 @@ import {
   Settings,
   ChevronsLeft,
   ChevronsRight,
-  HelpCircle,
   Zap,
 } from "lucide-react"
+
 
 interface NavItem {
   title: string
@@ -212,14 +212,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               <Settings className="h-[18px] w-[18px]" />
               <span>Settings</span>
             </Link>
-            <a
-              href="#"
-              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
-            >
-              <HelpCircle className="h-[18px] w-[18px]" />
-              <span>Help & Support</span>
-            </a>
           </>
+
         )}
 
         <Separator className="!my-2" />

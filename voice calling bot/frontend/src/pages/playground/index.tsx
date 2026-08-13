@@ -134,30 +134,21 @@ export function PlaygroundPage() {
         .filter(m => m.role !== "system")
         .slice(-10) // send last 10 messages for context
 
-      const res = await fetch("http://localhost:8000/api/v1/playground/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          agent_id: selectedAgentId || null,
-          message: input,
-          voice_id: selectedVoiceId,
-          llm_provider: selectedLLM,
-          temperature: temperature / 100,
-          conversation_history: history,
-        })
+      const data = await api.testChat({
+        agent_id: selectedAgentId || null,
+        message: input,
+        voice_id: selectedVoiceId,
+        llm_provider: selectedLLM,
+        temperature: temperature / 100,
+        conversation_history: history,
       })
 
-      if (res.ok) {
-        const data = await res.json()
-        setMessages(prev => [...prev, { role: "assistant", content: data.response }])
-        setLatencyMs(data.latency_ms)
-        setTokens(data.tokens)
-        setCost(data.cost)
-      } else {
-        setMessages(prev => [...prev, { role: "assistant", content: "Error: Could not connect to AI backend. Make sure `python run.py` is running." }])
-      }
+      setMessages(prev => [...prev, { role: "assistant", content: data.response }])
+      setLatencyMs(data.latency_ms)
+      setTokens(data.tokens)
+      setCost(data.cost)
     } catch (err) {
-      setMessages(prev => [...prev, { role: "assistant", content: "⚠️ Backend offline. Run `python run.py` in the backend directory." }])
+      setMessages(prev => [...prev, { role: "assistant", content: "⚠️ Could not connect to AI backend. Make sure the backend server is running." }])
     } finally {
       setIsTyping(false)
     }
@@ -167,23 +158,14 @@ export function PlaygroundPage() {
     setIsCalling(true)
     setCallStatus("Dialing via Twilio...")
     try {
-      const response = await fetch("http://localhost:8000/api/v1/calls/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          agent_id: selectedAgentId || "00000000-0000-0000-0000-000000000000",
-          from_number: "+17372212163",
-          to_number: targetPhone
-        })
+      const data = await api.startCall({
+        agent_id: selectedAgentId || "00000000-0000-0000-0000-000000000000",
+        from_number: "+17372212163",
+        to_number: targetPhone
       })
-      const data = await response.json()
-      if (response.ok) {
-        setCallStatus(`✅ Call Initiated! SID: ${data.provider_call_id || data.call_id || "Pending"}`)
-      } else {
-        setCallStatus(`⚠️ ${data.detail || "Call queued in dev mode"}`)
-      }
-    } catch (err) {
-      setCallStatus("⚠️ Backend offline. Run `python run.py` first.")
+      setCallStatus(`✅ Call Initiated! SID: ${data.provider_call_id || data.call_id || "Pending"}`)
+    } catch (err: any) {
+      setCallStatus(`⚠️ ${err.message || "Call error. Please check Twilio settings."}`)
     } finally {
       setIsCalling(false)
     }

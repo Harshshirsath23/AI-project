@@ -1,6 +1,5 @@
 from functools import lru_cache
 from typing import List, Dict, Any
-from urllib.parse import quote_plus
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -41,20 +40,19 @@ class Settings(BaseSettings):
     @property
     def database_url(self) -> str:
         """Construct database URL from individual components."""
-        # Use 127.0.0.1 instead of localhost to avoid DNS resolution issues
+        from urllib.parse import quote_plus
         host = "127.0.0.1" if self.db_host == "localhost" else self.db_host
-        # URL-encode password to handle special characters like @
         encoded_password = quote_plus(self.db_password)
-        return f"postgresql+asyncpg://{self.db_user}:{encoded_password}@{host}:{self.db_port}/{self.db_name}"
+        return f"postgresql+asyncpg://{self.db_user}:{encoded_password}@{host}:{self.db_port}/{self.db_name}?ssl=disable"
 
     @property
     def sync_database_url(self) -> str:
         """Construct synchronous database URL for Alembic migrations."""
-        # Use 127.0.0.1 instead of localhost to avoid DNS resolution issues
+        from urllib.parse import quote_plus
         host = "127.0.0.1" if self.db_host == "localhost" else self.db_host
-        # URL-encode password to handle special characters like @
         encoded_password = quote_plus(self.db_password)
         return f"postgresql+psycopg://{self.db_user}:{encoded_password}@{host}:{self.db_port}/{self.db_name}"
+
 
     # Redis
     redis_url: str = Field(default="redis://localhost:6379/0", description="Redis connection URL")
@@ -66,6 +64,7 @@ class Settings(BaseSettings):
 
     # Security
     secret_key: str = Field(default="your-secret-key-change-in-production", description="Secret key for JWT")
+    encryption_key: str = Field(default="", description="Base64 Fernet encryption key for sensitive data")
     algorithm: str = Field(default="HS256", description="JWT algorithm")
     access_token_expire_minutes: int = Field(default=30, description="Access token expiration in minutes")
 
@@ -83,8 +82,6 @@ class Settings(BaseSettings):
     gemini_api_key: str = Field(default="", description="Gemini API key")
     sarvam_api_key: str = Field(default="", description="Sarvam API key")
     nvidia_api_key: str = Field(default="", description="NVIDIA API key")
-    huggingface_api_key: str = Field(default="", description="Hugging Face API token")
-
 
     # AI Configuration
     ai_default_stt_provider: str = Field(default="faster_whisper", description="Default STT provider")
@@ -100,10 +97,7 @@ class Settings(BaseSettings):
     twilio_account_sid: str = Field(default="", description="Twilio account SID")
     twilio_auth_token: str = Field(default="", description="Twilio auth token")
     twilio_phone_number: str = Field(default="", description="Twilio phone number")
-    # Public base URL for Twilio webhooks.
-    # When testing locally, set this to your localtunnel URL e.g. https://xxxx.loca.lt
-    webhook_base_url: str = Field(default="http://localhost:8000", description="Public base URL for Twilio webhooks")
-
+    webhook_base_url: str = Field(default="http://localhost:8000", description="Public webhook base URL for webhooks")
 
     # Conversation Configuration
     conversation_session_timeout: int = Field(default=300, description="Conversation session timeout in seconds")

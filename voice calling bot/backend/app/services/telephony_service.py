@@ -27,11 +27,27 @@ class TwilioProvider(TelephonyProvider):
     """
 
     def __init__(self):
-        settings = get_settings()
-        self.account_sid = settings.twilio_account_sid
-        self.auth_token = settings.twilio_auth_token
         self.client = None
+        self.reload_credentials()
 
+    def reload_credentials(self):
+        """Reloads Twilio credentials from database and re-instantiates the client."""
+        from app.database.connection import SessionLocal
+        from app.models.organization import OrganizationSettings
+        
+        self.account_sid = None
+        self.auth_token = None
+        
+        try:
+            with SessionLocal() as db:
+                org_id = "00000000-0000-0000-0000-000000000000"
+                org_settings = db.query(OrganizationSettings).filter_by(organization_id=org_id).first()
+                if org_settings:
+                    self.account_sid = org_settings.twilio_account_sid
+                    self.auth_token = org_settings.twilio_auth_token
+        except Exception as e:
+            logger.error(f"Failed to load Twilio credentials from database: {e}")
+        
         if self.account_sid and self.auth_token:
             try:
                 from twilio.rest import Client
@@ -44,6 +60,9 @@ class TwilioProvider(TelephonyProvider):
                 )
             except Exception as e:
                 logger.error(f"Failed to initialize Twilio client: {e}. Falling back to mock mode.")
+        else:
+            self.client = None
+            logger.info("Twilio credentials absent. Operating in mock mode.")
 
     async def initiate_call(
         self,
@@ -54,9 +73,10 @@ class TwilioProvider(TelephonyProvider):
         inline_twiml: str = None
     ) -> str:
         """
-        Initiates an outbound call via Twilio.
+        Initiates an outbound call via Twilio using the latest database credentials.
         Works on both Trial and paid accounts.
         """
+        self.reload_credentials()
         if self.client:
             try:
                 create_kwargs = dict(

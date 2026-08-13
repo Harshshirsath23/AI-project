@@ -1,4 +1,5 @@
 from app.models.agent import Agent, AgentConfiguration, AgentVoiceProfile
+from app.models.audit_log import AuditLog
 from app.models.authentication import SecurityAuditLog
 from app.models.base import Base
 from app.models.call import Call
@@ -22,6 +23,7 @@ from app.models.user import Role, User
 
 __all__ = [
     "Base",
+    "AuditLog",
     "Organization",
     "OrganizationSettings",
     "User",
@@ -46,4 +48,4 @@ __all__ = [
     "ConversationMemory",
     "Call",
     "PhoneNumber",
-]
+]

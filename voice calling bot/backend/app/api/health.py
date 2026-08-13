@@ -1,10 +1,17 @@
-from datetime import UTC, datetime
+"""Health check and telemetry endpoints."""
 
-from fastapi import APIRouter
+from datetime import UTC, datetime
+from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+import redis.asyncio as redis
 
 from app.config.settings import get_settings
 from app.core.logging import get_logger
+from app.database.connection import get_async_db
+from app.database.redis import get_redis
+from app.observability.health_checks import HealthChecker
+from app.observability.metrics import metrics_endpoint_handler
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -23,40 +30,61 @@ class HealthResponse(BaseModel):
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health_check() -> HealthResponse:
-    """Health check endpoint to verify system status."""
-    try:
-        # Check database connection
-        from sqlalchemy import text
-        from app.database.connection import engine
+async def health_check(
+    db: AsyncSession = Depends(get_async_db),
+    redis_client: redis.Redis = Depends(get_redis),
+) -> HealthResponse:
+    """Comprehensive system health check endpoint."""
+    db_res = await HealthChecker.check_database(db)
+    redis_res = await HealthChecker.check_redis(redis_client)
 
-        async with engine.begin() as conn:
-            await conn.execute(text("SELECT 1"))
-        database_status = "connected"
-    except Exception as e:
-        logger.error("Database health check failed", error=str(e))
-        database_status = "disconnected"
+    db_status = "connected" if db_res["status"] == "healthy" else "disconnected"
+    redis_status = "connected" if redis_res["status"] == "healthy" else "disconnected"
 
-    try:
-        # Check Redis connection
-        from app.database.redis import redis_pool
-
-        import redis.asyncio as redis
-
-        client = redis.Redis(connection_pool=redis_pool)
-        await client.ping()
-        redis_status = "connected"
-    except Exception as e:
-        logger.error("Redis health check failed", error=str(e))
-        redis_status = "disconnected"
-
-    overall_status = "healthy" if database_status == "connected" and redis_status == "connected" else "degraded"
+    overall_status = "healthy" if db_status == "connected" and redis_status == "connected" else "degraded"
 
     return HealthResponse(
         status=overall_status,
         timestamp=datetime.now(UTC),
         version=settings.app_version,
         environment=settings.app_env,
-        database=database_status,
+        database=db_status,
         redis=redis_status,
     )
+
+
+@router.get("/health/live")
+async def liveness_probe():
+    """Kubernetes / Load Balancer liveness probe endpoint."""
+    return {"status": "alive", "timestamp": datetime.now(UTC).isoformat()}
+
+
+@router.get("/health/ready")
+async def readiness_probe(
+    db: AsyncSession = Depends(get_async_db),
+    redis_client: redis.Redis = Depends(get_redis),
+):
+    """Kubernetes / Load Balancer readiness probe endpoint."""
+    db_check = await HealthChecker.check_database(db)
+    redis_check = await HealthChecker.check_redis(redis_client)
+    celery_check = await HealthChecker.check_celery()
+
+    checks = {
+        "database": db_check,
+        "redis": redis_check,
+        "celery": celery_check,
+    }
+
+    all_healthy = all(c.get("status") == "healthy" for c in checks.values())
+
+    return {
+        "status": "ready" if all_healthy else "not_ready",
+        "timestamp": datetime.now(UTC).isoformat(),
+        "checks": checks,
+    }
+
+
+@router.get("/metrics")
+async def prometheus_metrics():
+    """Prometheus telemetry metrics endpoint."""
+    return metrics_endpoint_handler()

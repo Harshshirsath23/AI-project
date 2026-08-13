@@ -30,6 +30,8 @@ load_dotenv(env_path)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import asyncpg
+from alembic.config import Config
+from alembic import command
 
 from app.config.settings import get_settings
 
@@ -118,35 +120,45 @@ async def drop_database_if_exists(settings) -> None:
 
 def run_migrations(settings) -> None:
     """
-    Run SQLAlchemy create_all to create tables automatically.
+    Run Alembic migrations to create/update tables.
+    
+    Args:
+        settings: Application settings
     """
-    from sqlalchemy import create_engine
-    from app.models import Base
+    alembic_ini = Path(__file__).parent.parent / "alembic.ini"
     
-    print("Running database initialization (SQLAlchemy create_all)...")
-    db_url = settings.sync_database_url
-    engine = create_engine(db_url)
+    config = Config(str(alembic_ini))
+    # Use sync database URL for migrations (psycopg3 in sync mode)
+    config.set_main_option("sqlalchemy.url", settings.sync_database_url)
     
-    Base.metadata.create_all(bind=engine)
-    print("Database tables created successfully (without Alembic).")
+    # Upgrade to latest migration
+    print("Running database migrations...")
+    command.upgrade(config, "head")
+    print("Database migrations completed successfully.")
 
 
 def reset_migrations(settings) -> None:
     """
-    Reset database tables via SQLAlchemy.
+    Reset Alembic migrations (downgrade to base, then upgrade).
+    
+    Args:
+        settings: Application settings
     """
-    from sqlalchemy import create_engine
-    from app.models import Base
+    alembic_ini = Path(__file__).parent.parent / "alembic.ini"
     
-    print("Downgrading database (dropping all tables)...")
-    db_url = settings.sync_database_url
-    engine = create_engine(db_url)
+    config = Config(str(alembic_ini))
+    # Use sync database URL for migrations (psycopg3 in sync mode)
+    config.set_main_option("sqlalchemy.url", settings.sync_database_url)
     
-    Base.metadata.drop_all(bind=engine)
-    print("Upgrading database (creating all tables)...")
-    Base.metadata.create_all(bind=engine)
+    # Downgrade to base
+    print("Downgrading database to base...")
+    command.downgrade(config, "base")
     
-    print("Database reset successfully.")
+    # Upgrade to latest
+    print("Upgrading database to latest...")
+    command.upgrade(config, "head")
+    
+    print("Database migrations reset successfully.")
 
 
 def main():

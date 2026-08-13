@@ -52,12 +52,13 @@ async def list_calls(db: Session = Depends(get_db)):
             "from_number": c.from_number,
             "to_number": c.to_number,
             "status": c.status,
-            "duration_seconds": getattr(c, "duration_seconds", getattr(c, "call_duration_seconds", 0)) or 45,
+            "duration_seconds": getattr(c, "duration_seconds", getattr(c, "call_duration_seconds", 0)) or 0,
             "agent_name": agent_name,
             "agent_id": str(c.agent_id) if c.agent_id else None,
             "transcript": c.transcript,
+            "summary": c.summary,
+            "sentiment": c.sentiment or "neutral",
             "created_at": c.created_at.isoformat() if c.created_at else None,
-            "sentiment": "positive",
         })
     return result
 
@@ -92,9 +93,11 @@ async def list_live_calls(db: Session = Depends(get_db)):
             "to_number": c.to_number,
             "status": c.status,
             "agent_name": agent_name,
-            "duration_seconds": getattr(c, "duration_seconds", getattr(c, "call_duration_seconds", 0)) or 30,
+            "duration_seconds": getattr(c, "duration_seconds", getattr(c, "call_duration_seconds", 0)) or 0,
             "created_at": c.created_at.isoformat() if c.created_at else None,
             "transcript": c.transcript,
+            "summary": c.summary,
+            "sentiment": c.sentiment or "neutral",
         })
     return result
 
@@ -110,8 +113,10 @@ async def get_call_detail(call_id: str, db: Session = Depends(get_db)):
         "from_number": call.from_number,
         "to_number": call.to_number,
         "status": call.status,
-        "duration_seconds": getattr(call, "duration_seconds", getattr(call, "call_duration_seconds", 0)) or 60,
+        "duration_seconds": getattr(call, "duration_seconds", getattr(call, "call_duration_seconds", 0)) or 0,
         "transcript": call.transcript,
+        "summary": call.summary,
+        "sentiment": call.sentiment or "neutral",
         "created_at": call.created_at.isoformat() if call.created_at else None,
     }
 

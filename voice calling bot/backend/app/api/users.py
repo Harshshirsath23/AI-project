@@ -13,7 +13,7 @@ from app.authentication.dependencies import (
 )
 from app.authentication.security import hash_password, validate_password_strength
 from app.core.logging import get_logger
-from app.database.connection import get_db
+from app.database.connection import get_async_db
 from app.models.user import Role, User
 from app.schemas.user import (
     UserCreate,
@@ -35,7 +35,7 @@ async def list_users(
     is_active: Optional[bool] = Query(None),
     role_id: Optional[str] = Query(None),
     org_context: AuthenticatedUser = Depends(get_organization_context),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     List users in the organization with pagination, filtering, and search.
@@ -128,7 +128,7 @@ async def list_users(
 async def get_user(
     user_id: str,
     org_context: AuthenticatedUser = Depends(get_organization_context),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Get details of a specific user.
@@ -175,7 +175,7 @@ async def create_user(
     org_context: AuthenticatedUser = Depends(
         require_permission("manage_users")
     ),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Create a new user in the organization.
@@ -274,7 +274,7 @@ async def update_user(
     org_context: AuthenticatedUser = Depends(
         require_permission("manage_users")
     ),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Update a user's information.
@@ -338,7 +338,7 @@ async def deactivate_user(
     org_context: AuthenticatedUser = Depends(
         require_permission("manage_users")
     ),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Deactivate a user account.
@@ -383,7 +383,7 @@ async def activate_user(
     org_context: AuthenticatedUser = Depends(
         require_permission("manage_users")
     ),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Activate a deactivated user account.

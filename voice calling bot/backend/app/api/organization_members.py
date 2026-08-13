@@ -12,7 +12,7 @@ from app.authentication.dependencies import (
 )
 from app.authentication.security import hash_password, validate_password_strength
 from app.core.logging import get_logger
-from app.database.connection import get_db
+from app.database.connection import get_async_db
 from app.models.user import Role, User
 from app.schemas.organization_member import (
     OrganizationMemberCreate,
@@ -32,7 +32,7 @@ async def list_members(
     is_active: Optional[bool] = Query(None),
     role_id: Optional[str] = Query(None),
     org_context: AuthenticatedUser = Depends(get_organization_context),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     List all members of the current organization.
@@ -100,7 +100,7 @@ async def list_members(
 async def add_member(
     member_data: OrganizationMemberCreate,
     org_context: AuthenticatedUser = Depends(require_permission("manage_users")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Add a new member to the organization.
@@ -191,7 +191,7 @@ async def update_member(
     user_id: str,
     member_data: OrganizationMemberUpdate,
     org_context: AuthenticatedUser = Depends(require_permission("manage_users")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Update a member's role and information.
@@ -267,7 +267,7 @@ async def update_member(
 async def remove_member(
     user_id: str,
     org_context: AuthenticatedUser = Depends(require_permission("manage_users")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Remove a member from the organization (soft delete).

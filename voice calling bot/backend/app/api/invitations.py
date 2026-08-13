@@ -12,7 +12,7 @@ from app.authentication.dependencies import (
 )
 from app.authentication.security import generate_secure_token
 from app.core.logging import get_logger
-from app.database.connection import get_db
+from app.database.connection import get_async_db
 from app.models.invitation import OrganizationInvitation
 from app.models.user import Role
 from app.schemas.organization_member import (
@@ -30,7 +30,7 @@ async def list_invitations(
     page_size: int = Query(20, ge=1, le=100),
     status_filter: str = Query(None, alias="status"),
     org_context: AuthenticatedUser = Depends(get_organization_context),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     List all invitations for the current organization.
@@ -88,7 +88,7 @@ async def list_invitations(
 async def create_invitation(
     invite_data: OrganizationInviteCreate,
     org_context: AuthenticatedUser = Depends(require_permission("manage_users")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Create an invitation for a user to join the organization.
@@ -165,7 +165,7 @@ async def create_invitation(
 @router.post("/{invitation_id}/accept")
 async def accept_invitation(
     invitation_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Accept an organization invitation.
@@ -216,7 +216,7 @@ async def accept_invitation(
 @router.post("/{invitation_id}/decline")
 async def decline_invitation(
     invitation_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Decline an organization invitation.
@@ -258,7 +258,7 @@ async def decline_invitation(
 async def cancel_invitation(
     invitation_id: str,
     org_context: AuthenticatedUser = Depends(require_permission("manage_users")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Cancel a pending invitation.

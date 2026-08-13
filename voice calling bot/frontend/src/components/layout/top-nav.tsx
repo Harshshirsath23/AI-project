@@ -110,9 +110,17 @@ export function TopNav({ onSearchOpen, className }: TopNavProps) {
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive focus:text-destructive">
+            <DropdownMenuItem 
+              className="text-destructive focus:text-destructive"
+              onClick={() => {
+                localStorage.removeItem("auth_token");
+                localStorage.removeItem("refresh_token");
+                window.location.href = "/login";
+              }}
+            >
               <LogOut className="mr-2 h-4 w-4" /> Log out
             </DropdownMenuItem>
+
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

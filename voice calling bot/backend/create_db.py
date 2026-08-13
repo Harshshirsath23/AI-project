@@ -1,6 +1,7 @@
 import sys
 import os
 from sqlalchemy import create_engine, text
+from urllib.parse import quote_plus
 
 # Add backend directory to sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -12,18 +13,15 @@ import app.models  # Ensures all SQLAlchemy models are imported and registered w
 def init_database():
     settings = get_settings()
     
-    print("=== Voxera Database Initialization ===")
+    print("=== Voxera PostgreSQL Database Initialization ===")
     print(f"Target DB Host: {settings.db_host}:{settings.db_port}")
     print(f"Target DB Name: {settings.db_name}")
 
-    engine = None
-    # 1. Try PostgreSQL connection
+    encoded_pass = quote_plus(settings.db_password)
+    admin_url = f"postgresql+psycopg://{settings.db_user}:{encoded_pass}@{settings.db_host}:{settings.db_port}/postgres"
+    
+    # 1. Connect to PostgreSQL server to create target database if needed
     try:
-        # Connect to postgres server to create target database if needed
-        from urllib.parse import quote_plus
-        encoded_pass = quote_plus(settings.db_password)
-        admin_url = f"postgresql+psycopg://{settings.db_user}:{encoded_pass}@{settings.db_host}:{settings.db_port}/postgres"
-        
         admin_engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
         with admin_engine.connect() as conn:
             result = conn.execute(text(f"SELECT 1 FROM pg_database WHERE datname='{settings.db_name}'"))
@@ -33,28 +31,28 @@ def init_database():
                 print(f"Database '{settings.db_name}' created successfully!")
             else:
                 print(f"PostgreSQL Database '{settings.db_name}' already exists.")
-        
-        # Connect to actual target database
-        db_url = f"postgresql+psycopg://{settings.db_user}:{encoded_pass}@{settings.db_host}:{settings.db_port}/{settings.db_name}"
-        engine = create_engine(db_url)
-        print("Connected to PostgreSQL successfully.")
     except Exception as e:
-        print(f"PostgreSQL connection failed ({e}). Falling back to local SQLite database 'voxera.db'...")
-        engine = create_engine("sqlite:///./voxera.db", echo=True)
+        print(f"Failed to check/create PostgreSQL database '{settings.db_name}': {e}")
+        raise e
 
-    # 2. Create All Tables
-    print("Creating database tables...")
+    # 2. Connect to actual PostgreSQL target database
+    db_url = f"postgresql+psycopg://{settings.db_user}:{encoded_pass}@{settings.db_host}:{settings.db_port}/{settings.db_name}"
+    engine = create_engine(db_url)
+    print("Connected to PostgreSQL database successfully.")
+
+    # 3. Create All Tables in PostgreSQL
+    print("Creating database tables in PostgreSQL...")
     try:
         with engine.connect() as conn:
             conn.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
             conn.commit()
     except Exception as e:
         print(f"Schema drop info: {e}")
+
     Base.metadata.create_all(engine)
-    print("All database tables created successfully!")
+    print("All PostgreSQL database tables created successfully!")
 
-
-    # 3. Seed Default Records
+    # 4. Seed Default Records in PostgreSQL
     from sqlalchemy.orm import sessionmaker
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()
@@ -77,6 +75,20 @@ def init_database():
             session.add(org)
             session.commit()
             print("Seeded Organization: Voxera AI Platform")
+
+            # Seed Default Organization Settings
+            from app.models.organization import OrganizationSettings
+            # get_settings is already imported globally, use it directly
+            app_settings = settings # 'settings' is already defined at the top of the function
+            
+            org_settings = OrganizationSettings(
+                organization_id=org.id,
+                twilio_account_sid=app_settings.twilio_account_sid or "",
+                twilio_auth_token=app_settings.twilio_auth_token or ""
+            )
+            session.add(org_settings)
+            session.commit()
+            print("Seeded Organization Settings")
 
         # Seed Default Agent
         agent = session.query(Agent).filter_by(organization_id=org_id).first()
@@ -105,7 +117,6 @@ def init_database():
             session.add(phone)
             session.commit()
             print("Seeded Phone Number: +17372212163")
-
 
         # Seed Default Lead
         lead = session.query(Lead).filter_by(organization_id=org_id).first()
@@ -149,14 +160,12 @@ def init_database():
             session.commit()
             print("Seeded Knowledge Base & Script Document!")
 
-
-
     except Exception as e:
-        print(f"Error seeding default records: {e}")
+        print(f"Error seeding default PostgreSQL records: {e}")
     finally:
         session.close()
 
-    print("=== Database Initialization Complete ===")
+    print("=== PostgreSQL Database Initialization Complete ===")
 
 if __name__ == "__main__":
     init_database()

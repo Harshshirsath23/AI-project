@@ -36,9 +36,11 @@ class Call(BaseModel):
     
     transcript: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    sentiment: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     
     started_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
     ended_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+    duration_seconds: Mapped[Optional[int]] = mapped_column(default=0, nullable=True)
 
     # Relationships
     agent: Mapped["Agent"] = relationship("Agent")

@@ -2,6 +2,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
 
 from app.api.agents import router as agents_router
 from app.api.phone_numbers import router as phone_numbers_router
@@ -20,11 +22,20 @@ from app.api.campaigns import router as campaigns_router
 from app.api.settings import router as settings_router
 from app.api.playground import router as playground_router
 from app.api.webhooks import router as webhooks_router
+from app.websockets import websockets_router
+
 
 from app.config.settings import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.database.connection import close_db, init_db
-from app.database.redis import close_redis, init_redis
+from app.database.redis import close_redis, init_redis, get_redis_client
+from app.middleware import (
+    CorrelationIDMiddleware,
+    SecurityHeadersMiddleware,
+    RequestValidatorMiddleware,
+    RateLimitMiddleware,
+)
+from app.observability import MetricsMiddleware
 
 logger = get_logger(__name__)
 settings = get_settings()
@@ -33,7 +44,6 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
-    # Startup
     logger.info("Starting application", version=settings.app_version, environment=settings.app_env)
     configure_logging()
     await init_db()
@@ -42,11 +52,33 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown
     logger.info("Shutting down application")
     await close_db()
     await close_redis()
     logger.info("Application shutdown complete")
+
+
+class LocalTunnelBypassMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: StarletteRequest, call_next):
+        response = await call_next(request)
+        response.headers["Bypass-Tunnel-Reminder"] = "anyvalue"
+        return response
+
+
+class DynamicRateLimitMiddleware(BaseHTTPMiddleware):
+    """Wrapper middleware dynamically injecting the Redis client into RateLimitMiddleware."""
+
+    async def dispatch(self, request: StarletteRequest, call_next):
+        try:
+            redis_client = get_redis_client()
+        except Exception:
+            redis_client = None
+
+        inner_middleware = RateLimitMiddleware(
+            app=None,
+            redis_client=redis_client,
+        )
+        return await inner_middleware.dispatch(request, call_next)
 
 
 def create_app() -> FastAPI:
@@ -61,6 +93,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Middleware execution stack (outermost first)
+    app.add_middleware(CorrelationIDMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(RequestValidatorMiddleware)
+    app.add_middleware(MetricsMiddleware)
+    app.add_middleware(LocalTunnelBypassMiddleware)
+    app.add_middleware(DynamicRateLimitMiddleware)
+
     # Configure CORS
     app.add_middleware(
         CORSMiddleware,
@@ -69,18 +109,6 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-    # Middleware: add Bypass-Tunnel-Reminder header so localtunnel doesn't intercept Twilio requests
-    from starlette.middleware.base import BaseHTTPMiddleware
-    from starlette.requests import Request as StarletteRequest
-
-    class LocalTunnelBypassMiddleware(BaseHTTPMiddleware):
-        async def dispatch(self, request: StarletteRequest, call_next):
-            response = await call_next(request)
-            response.headers["Bypass-Tunnel-Reminder"] = "anyvalue"
-            return response
-
-    app.add_middleware(LocalTunnelBypassMiddleware)
 
     # Include routers
     app.include_router(health_router, prefix=settings.api_prefix, tags=["health"])
@@ -97,16 +125,13 @@ def create_app() -> FastAPI:
     app.include_router(analytics_router, prefix=f"{settings.api_prefix}/analytics", tags=["analytics"])
     app.include_router(settings_router, prefix=f"{settings.api_prefix}/settings", tags=["settings"])
     app.include_router(playground_router, prefix=f"{settings.api_prefix}/playground", tags=["playground"])
-
     app.include_router(calls_router, prefix=f"{settings.api_prefix}/calls", tags=["calls"])
-
-
     app.include_router(campaigns_router, prefix=f"{settings.api_prefix}/campaigns", tags=["campaigns"])
     app.include_router(webhooks_router, prefix=f"{settings.api_prefix}/webhooks", tags=["webhooks"])
     app.include_router(webhooks_router, prefix="/webhooks", tags=["webhooks"])
+    app.include_router(websockets_router, tags=["websockets"])
 
     return app
-
 
 
 

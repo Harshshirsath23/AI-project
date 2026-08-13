@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.authentication.jwt import decode_token, is_token_expired
 from app.authentication.service import AuthenticationService
 from app.core.logging import get_logger
-from app.database.connection import get_db
+from app.database.connection import get_async_db
 from app.models.organization import Organization
 from app.models.user import Role, User
 
@@ -33,7 +33,7 @@ class AuthenticatedUser:
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ) -> AuthenticatedUser:
     """
     Dependency to get the current authenticated user.
@@ -140,7 +140,7 @@ async def get_optional_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(
         HTTPBearer(auto_error=False)
     ),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ) -> Optional[AuthenticatedUser]:
     """
     Optional authentication dependency.

@@ -83,6 +83,10 @@ class OrganizationSettings(BaseModel, AuditMixin):
     retention_days: Mapped[int] = mapped_column(default=90, nullable=False)
     custom_branding_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
     api_rate_limit: Mapped[int] = mapped_column(default=1000, nullable=False)
+    
+    # Telephony Integrations
+    twilio_account_sid: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    twilio_auth_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # Relationships
     organization: Mapped["Organization"] = relationship(

@@ -14,6 +14,8 @@ engine = create_async_engine(
     settings.database_url,
     pool_size=settings.database_pool_size,
     max_overflow=settings.database_max_overflow,
+    pool_pre_ping=True,
+    pool_recycle=3600,
     echo=settings.database_echo,
     future=True,
 )
@@ -36,8 +38,11 @@ sync_engine = create_engine(
     settings.sync_database_url,
     pool_size=settings.database_pool_size,
     max_overflow=settings.database_max_overflow,
+    pool_pre_ping=True,
+    pool_recycle=3600,
     echo=settings.database_echo,
 )
+
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
 
@@ -54,13 +59,32 @@ def get_db():
         db.close()
 
 
+async def get_async_db():
+    """Dependency for getting async database session."""
+    async with AsyncSessionLocal() as db:
+        try:
+            yield db
+        except Exception:
+            await db.rollback()
+            raise
+        finally:
+            await db.close()
+
+
 
 async def init_db() -> None:
-    """Initialize database connection."""
+    """Initialize database connection and verify columns."""
     try:
         async with engine.begin() as conn:
             # Test connection
             await conn.execute(text("SELECT 1"))
+            # Auto-migrate new columns if table already exists
+            try:
+                await conn.execute(text('ALTER TABLE "call" ADD COLUMN IF NOT EXISTS sentiment VARCHAR(50);'))
+                await conn.execute(text('ALTER TABLE "call" ADD COLUMN IF NOT EXISTS summary TEXT;'))
+                await conn.execute(text('ALTER TABLE "call" ADD COLUMN IF NOT EXISTS duration_seconds INTEGER DEFAULT 0;'))
+            except Exception:
+                pass
         logger.info("Database connection established successfully")
     except Exception as e:
         logger.error("Failed to establish database connection", error=str(e))

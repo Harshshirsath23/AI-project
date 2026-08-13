@@ -41,14 +41,15 @@ const PhoneNumbersPage = React.lazy(() => import("@/pages/phone-numbers").then(m
 
 export const router = createBrowserRouter([
   // Auth routes
+  { path: "/login", element: <LoginPage /> },
   {
     element: <AuthLayout />,
     children: [
-      { path: "/login", element: <LoginPage /> },
       { path: "/forgot-password", element: <ForgotPasswordPage /> },
       { path: "/reset-password", element: <ResetPasswordPage /> },
     ],
   },
+
 
   // App routes (protected)
   {
