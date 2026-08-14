@@ -1,0 +1,6 @@
+{
+  "name": "TalentSphere Enterprise Login",
+  "description": "Enterprise-grade AI Operating System for recruitment teams with high-security authentication, SSO integration, atmospheric canvas background, and interactive authorization workflows.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
